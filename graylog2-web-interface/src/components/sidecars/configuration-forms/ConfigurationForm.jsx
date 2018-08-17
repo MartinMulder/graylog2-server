@@ -3,28 +3,28 @@ import React from 'react';
 import createReactClass from 'create-react-class';
 import Reflux from 'reflux';
 import lodash from 'lodash';
-import { Button, ButtonToolbar, Col, ControlLabel, FormGroup, HelpBlock, Row } from 'react-bootstrap';
+import { Button, ButtonToolbar, Col, ControlLabel, FormControl, FormGroup, HelpBlock, Row } from 'react-bootstrap';
 
 import { ColorPickerPopover, Select, SourceCodeEditor } from 'components/common';
 import { Input } from 'components/bootstrap';
 import history from 'util/History';
 import Routes from 'routing/Routes';
+import ColorLabel from 'components/sidecars/common/ColorLabel';
 
 import CombinedProvider from 'injection/CombinedProvider';
 import SourceViewModal from './SourceViewModal';
-import ColorLabel from 'components/sidecars/common/ColorLabel';
 
 const { CollectorsStore, CollectorsActions } = CombinedProvider.get('Collectors');
 const { CollectorConfigurationsActions } = CombinedProvider.get('CollectorConfigurations');
 
 const ConfigurationForm = createReactClass({
   displayName: 'ConfigurationForm',
-  mixins: [Reflux.connect(CollectorsStore)],
-
   propTypes: {
     action: PropTypes.oneOf(['create', 'edit']),
     configuration: PropTypes.object,
+    configurationSidecars: PropTypes.object,
   },
+  mixins: [Reflux.connect(CollectorsStore)],
 
   getDefaultProps() {
     return {
@@ -33,6 +33,7 @@ const ConfigurationForm = createReactClass({
         color: '#FFFFFF',
         template: '',
       },
+      configurationSidecars: {},
     };
   },
 
@@ -107,12 +108,16 @@ const ConfigurationForm = createReactClass({
     this.modal.open();
   },
 
+  _formatCollector(collector) {
+    return collector ? `${collector.name} on ${lodash.upperFirst(collector.node_operating_system)}` : 'Unknown collector';
+  },
+
   _formatCollectorOptions() {
     const options = [];
 
     if (this.state.collectors) {
       this.state.collectors.forEach((collector) => {
-        options.push({ value: collector.id, label: `${collector.name} on ${lodash.upperFirst(collector.node_operating_system)}` });
+        options.push({ value: collector.id, label: this._formatCollector(collector) });
       });
     } else {
       options.push({ value: 'none', label: 'Loading collector list...', disable: true });
@@ -129,6 +134,35 @@ const ConfigurationForm = createReactClass({
       }
     });
     return defaultTemplate;
+  },
+
+  _renderCollectorTypeField(collectorId, collectors, configurationSidecars) {
+    const isConfigurationInUse = configurationSidecars.sidecar_ids && configurationSidecars.sidecar_ids.length > 0;
+
+    if (isConfigurationInUse) {
+      const collector = collectors ? collectors.find(c => c.id === collectorId) : undefined;
+      return (
+        <span>
+          <FormControl.Static>{this._formatCollector(collector)}</FormControl.Static>
+          <HelpBlock bsClass="warning">
+            <b>Note:</b> Log Collector cannot change while the Configuration is in use. Clone the Configuration
+            for testing it with a new Collector.
+          </HelpBlock>
+        </span>
+      );
+    }
+
+    return (
+      <span>
+        <Select inputProps={{ id: 'collector_id' }}
+                options={this._formatCollectorOptions()}
+                value={collectorId}
+                onChange={this._onCollectorChange}
+                placeholder="Collector"
+                required />
+        <HelpBlock>Choose the log collector this configuration is meant for.</HelpBlock>
+      </span>
+    );
   },
 
   render() {
@@ -163,13 +197,7 @@ const ConfigurationForm = createReactClass({
 
             <FormGroup controlId="collector_id">
               <ControlLabel>Collector</ControlLabel>
-              <Select inputProps={{ id: 'collector_id' }}
-                      options={this._formatCollectorOptions()}
-                      value={this.state.formData.collector_id}
-                      onChange={this._onCollectorChange}
-                      placeholder="Collector"
-                      required />
-              <HelpBlock>Choose the log collector this configuration is meant for.</HelpBlock>
+              {this._renderCollectorTypeField(this.state.formData.collector_id, this.state.collectors, this.props.configurationSidecars)}
             </FormGroup>
 
             <FormGroup controlId="template">
